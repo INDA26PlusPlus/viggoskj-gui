@@ -177,7 +177,7 @@ impl EventHandler for ChessGui {
 
             // show possible moves
 
-            let legal = self.chess.legal_moves(pos_to_index(square.1, square.0));
+            let legal = self.chess.legal_moves(pos_to_index(square));
 
             for l in legal {
                 self.draw_board_square_index(
@@ -207,6 +207,21 @@ impl EventHandler for ChessGui {
             return Ok(());
         }
 
+        if let Some(from) = self.selected_square {
+            let to = (
+                (_x / self.square_size as f32) as u32,
+                (_y / self.square_size as f32) as u32,
+            );
+
+            if self
+                .chess
+                .move_piece(pos_to_index(from), pos_to_index(to), None)
+                .is_ok()
+            {
+                return Ok(());
+            }
+        }
+
         self.selected_square = Some((
             (_x / self.square_size as f32) as u32,
             (_y / self.square_size as f32) as u32,
@@ -220,6 +235,6 @@ fn index_to_pos(i: usize) -> (u32, u32) {
     (i as u32 / 8, (i as u32) % 8)
 }
 
-fn pos_to_index(row: u32, col: u32) -> usize {
-    (row * 8 + col) as usize
+fn pos_to_index(pos: (u32, u32)) -> usize {
+    (pos.1 * 8 + pos.0) as usize
 }
