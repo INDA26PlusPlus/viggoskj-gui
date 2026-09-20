@@ -1,12 +1,15 @@
 use std::path::{Component, Path, PathBuf};
+use std::ptr::read;
 
 use chessy;
 use crevice::std140::AsStd140;
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{
-    self, Color, DrawParam, Drawable, GraphicsContext, Image, Quad, Shader, ShaderBuilder,
+    self, Canvas, Color, DrawParam, Drawable, GraphicsContext, Image, Quad, Shader, ShaderBuilder,
     ShaderParamsBuilder,
 };
+use ggez::input::gamepad;
+use ggez::winit::event::MouseButton;
 use ggez::winit::keyboard::NamedKey::ColorF3Blue;
 use ggez::{Context, ContextBuilder, GameResult};
 
@@ -36,6 +39,8 @@ fn main() {
 struct ChessGui {
     chess: chessy::Chess,
 
+    selected_square: Option<(u32, u32)>,
+
     square_size: u32,
     resources: Resources,
 }
@@ -62,6 +67,7 @@ impl ChessGui {
         ChessGui {
             chess: chessy::Chess::new(),
             square_size: 64,
+            selected_square: None,
             resources: Resources {
                 queen: Image::from_path(&_ctx.gfx, "/wq.png").unwrap(),
                 pawn: Image::from_path(&_ctx.gfx, "/wp.png").unwrap(),
@@ -73,6 +79,22 @@ impl ChessGui {
                 black_shader: black_shader,
             },
         }
+    }
+
+    fn draw_board_square(&self, canvas: &mut Canvas, row: u32, col: u32, color: Color) {
+        let base = DrawParam::default()
+            .scale([self.square_size as f32, self.square_size as f32])
+            .dest([
+                (col * self.square_size) as f32,
+                (row * self.square_size) as f32,
+            ])
+            .color(color);
+
+        canvas.draw(&Quad, base);
+    }
+    fn draw_board_square_index(&self, canvas: &mut Canvas, index: usize, color: Color) {
+        let (row, col) = index_to_pos(index);
+        self.draw_board_square(canvas, row, col, color);
     }
 }
 
@@ -89,20 +111,13 @@ impl EventHandler for ChessGui {
         for i in 0..64 {
             let (row, col) = index_to_pos(i);
 
-            let mut base = DrawParam::default()
-                .scale([self.square_size as f32, self.square_size as f32])
-                .dest([
-                    (col * self.square_size) as f32,
-                    (row * self.square_size) as f32,
-                ]);
-
-            if row % 2 != col % 2 {
-                base = base.color(Color::BLACK);
+            let color = if row % 2 != col % 2 {
+                Color::BLACK
             } else {
-                base = base.color(Color::RED);
-            }
+                Color::RED
+            };
 
-            canvas.draw(&Quad, base);
+            self.draw_board_square(&mut canvas, row, col, color);
         }
 
         canvas.set_shader(&self.resources.black_shader);
@@ -145,10 +160,66 @@ impl EventHandler for ChessGui {
             }
         }
 
+        canvas.set_default_shader();
+
+        if let Some(square) = self.selected_square {
+            self.draw_board_square(
+                &mut canvas,
+                square.1,
+                square.0,
+                Color {
+                    a: 0.5,
+                    b: 0.0,
+                    g: 1.0,
+                    r: 1.0,
+                },
+            );
+
+            // show possible moves
+
+            let legal = self.chess.legal_moves(pos_to_index(square.1, square.0));
+
+            for l in legal {
+                self.draw_board_square_index(
+                    &mut canvas,
+                    l,
+                    Color {
+                        a: 0.5,
+                        b: 0.0,
+                        g: 1.0,
+                        r: 0.0,
+                    },
+                );
+            }
+        }
+
         canvas.finish(ctx)
+    }
+
+    fn mouse_button_down_event(
+        &mut self,
+        _ctx: &mut Context,
+        _button: ggez::winit::event::MouseButton,
+        _x: f32,
+        _y: f32,
+    ) -> Result<(), ggez::GameError> {
+        if _button != MouseButton::Left {
+            return Ok(());
+        }
+
+        self.selected_square = Some((
+            (_x / self.square_size as f32) as u32,
+            (_y / self.square_size as f32) as u32,
+        ));
+
+        return Ok(());
     }
 }
 
 fn index_to_pos(i: usize) -> (u32, u32) {
     (i as u32 / 8, (i as u32) % 8)
+}
+
+fn pos_to_index(row: u32, col: u32) -> usize {
+    (row * 8 + col) as usize
 }
