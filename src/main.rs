@@ -6,7 +6,7 @@ use crevice::std140::AsStd140;
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{
     self, Canvas, Color, DrawParam, Drawable, GraphicsContext, Image, Quad, Shader, ShaderBuilder,
-    ShaderParamsBuilder,
+    ShaderParams, ShaderParamsBuilder, Text,
 };
 use ggez::input::gamepad;
 use ggez::winit::event::MouseButton;
@@ -54,6 +54,8 @@ struct Resources {
     king: Image,
 
     black_shader: Shader,
+    white_params: ShaderParams<BlackShaderParams>,
+    black_params: ShaderParams<BlackShaderParams>,
 }
 
 impl ChessGui {
@@ -77,6 +79,11 @@ impl ChessGui {
                 king: Image::from_path(&_ctx.gfx, "/wk.png").unwrap(),
 
                 black_shader: black_shader,
+
+                white_params: ShaderParamsBuilder::new(&BlackShaderParams { invert: 0.0f32 })
+                    .build(_ctx),
+                black_params: ShaderParamsBuilder::new(&BlackShaderParams { invert: 1.0f32 })
+                    .build(_ctx),
             },
         }
     }
@@ -92,21 +99,13 @@ impl ChessGui {
 
         canvas.draw(&Quad, base);
     }
+
     fn draw_board_square_index(&self, canvas: &mut Canvas, index: usize, color: Color) {
         let (row, col) = index_to_pos(index);
         self.draw_board_square(canvas, row, col, color);
     }
-}
 
-impl EventHandler for ChessGui {
-    fn update(&mut self, _ctx: &mut Context) -> GameResult {
-        // Update code here...
-        Ok(())
-    }
-
-    fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(ctx, Color::WHITE);
-
+    fn draw_board_base(&self, canvas: &mut Canvas) {
         // grid
         for i in 0..64 {
             let (row, col) = index_to_pos(i);
@@ -117,16 +116,12 @@ impl EventHandler for ChessGui {
                 Color::RED
             };
 
-            self.draw_board_square(&mut canvas, row, col, color);
+            self.draw_board_square(canvas, row, col, color);
         }
 
         canvas.set_shader(&self.resources.black_shader);
 
-        let white_params =
-            ShaderParamsBuilder::new(&BlackShaderParams { invert: 0.0f32 }).build(ctx);
-        let black_params =
-            ShaderParamsBuilder::new(&BlackShaderParams { invert: 1.0f32 }).build(ctx);
-        canvas.set_shader_params(&white_params);
+        canvas.set_shader_params(&self.resources.white_params);
 
         for i in 0..64 {
             let (row, col) = index_to_pos(i);
@@ -140,7 +135,7 @@ impl EventHandler for ChessGui {
                     chessy::PieceType::Queen => &self.resources.queen,
                     chessy::PieceType::Rook => &self.resources.rook,
                 };
-                let mut base = DrawParam::default()
+                let base = DrawParam::default()
                     .dest([
                         (col * self.square_size) as f32,
                         (row * self.square_size) as f32,
@@ -151,47 +146,85 @@ impl EventHandler for ChessGui {
                     ]);
 
                 if piece.color == chessy::Color::Black {
-                    canvas.set_shader_params(&black_params);
+                    canvas.set_shader_params(&self.resources.black_params);
                 } else {
-                    canvas.set_shader_params(&white_params);
+                    canvas.set_shader_params(&self.resources.white_params);
                 }
 
                 canvas.draw(texture, base);
             }
         }
+    }
+
+    fn bilboard(&self, canvas: &mut Canvas, ctx: &mut Context, text: String) {
+        let mut text = Text::new(text);
+        text.set_scale(50.0f32);
+
+        let dim = text.measure(ctx).unwrap();
+        canvas.draw(&Quad, DrawParam::default().scale(dim).color(Color::BLACK));
+
+        canvas.draw(&text, DrawParam::default());
+    }
+}
+
+impl EventHandler for ChessGui {
+    fn update(&mut self, _ctx: &mut Context) -> GameResult {
+        // Update code here...
+        Ok(())
+    }
+
+    fn draw(&mut self, ctx: &mut Context) -> GameResult {
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::WHITE);
+
+        self.draw_board_base(&mut canvas);
 
         canvas.set_default_shader();
-
-        if let Some(square) = self.selected_square {
-            self.draw_board_square(
-                &mut canvas,
-                square.1,
-                square.0,
-                Color {
-                    a: 0.5,
-                    b: 0.0,
-                    g: 1.0,
-                    r: 1.0,
-                },
-            );
-
-            // show possible moves
-
-            let legal = self.chess.legal_moves(pos_to_index(square));
-
-            for l in legal {
-                self.draw_board_square_index(
-                    &mut canvas,
-                    l,
-                    Color {
-                        a: 0.5,
-                        b: 0.0,
-                        g: 1.0,
-                        r: 0.0,
-                    },
-                );
+        
+        match self.chess.game_status() {
+            chessy::GameStatus::Checkmate => {
+                self.bilboard(&mut canvas, ctx, "checkmate".to_string());
+            }
+            chessy::GameStatus::Stalemate => {
+                self.bilboard(&mut canvas, ctx, "Stalemate".to_string());
+            }
+            chessy::GameStatus::Check => {
+                self.bilboard(&mut canvas, ctx, "Check".to_string());
+            }
+            _ => {
+                
             }
         }
+
+        if let Some(square) = self.selected_square {
+                    self.draw_board_square(
+                        &mut canvas,
+                        square.1,
+                        square.0,
+                        Color {
+                            a: 0.5,
+                            b: 0.0,
+                            g: 1.0,
+                            r: 1.0,
+                        },
+                    );
+
+                    // show possible moves
+
+                    let legal = self.chess.legal_moves(pos_to_index(square));
+
+                    for l in legal {
+                        self.draw_board_square_index(
+                            &mut canvas,
+                            l,
+                            Color {
+                                a: 0.5,
+                                b: 0.0,
+                                g: 1.0,
+                                r: 0.0,
+                            },
+                        );
+                    }
+                }
 
         canvas.finish(ctx)
     }
