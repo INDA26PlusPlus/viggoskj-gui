@@ -14,6 +14,7 @@ use std::path::{Component, Path, PathBuf};
 #[derive(AsStd140)]
 struct BlackShaderParams {
     invert: f32,
+    time: f32,
 }
 
 fn main() {
@@ -57,7 +58,6 @@ struct Resources {
 
     black_shader: Shader,
     white_params: ShaderParams<BlackShaderParams>,
-    black_params: ShaderParams<BlackShaderParams>,
 }
 
 impl ChessGui {
@@ -86,12 +86,21 @@ impl ChessGui {
 
                 black_shader: black_shader,
 
-                white_params: ShaderParamsBuilder::new(&BlackShaderParams { invert: 0.0f32 })
-                    .build(_ctx),
-                black_params: ShaderParamsBuilder::new(&BlackShaderParams { invert: 1.0f32 })
-                    .build(_ctx),
+                white_params: ShaderParamsBuilder::new(&BlackShaderParams {
+                    invert: 0.0f32,
+                    time: 0f32,
+                })
+                .build(_ctx),
             },
         }
+    }
+
+    fn black_params(&self, ctx: &mut Context) -> ShaderParams<BlackShaderParams> {
+        ShaderParamsBuilder::new(&BlackShaderParams {
+            invert: 1.0f32,
+            time: ctx.time.time_since_start().as_secs_f32(),
+        })
+        .build(ctx)
     }
 
     fn draw_board_square(&self, canvas: &mut Canvas, row: u32, col: u32, color: Color) {
@@ -110,7 +119,7 @@ impl ChessGui {
         self.draw_board_square(canvas, row, col, color);
     }
 
-    fn draw_board_base(&self, canvas: &mut Canvas) {
+    fn draw_board_base(&self, canvas: &mut Canvas, ctx: &mut Context) {
         // grid
         for i in 0..64 {
             let (row, col) = index_to_pos(i);
@@ -151,7 +160,7 @@ impl ChessGui {
                     ]);
 
                 if piece.color == chessy::Color::Black {
-                    canvas.set_shader_params(&self.resources.black_params);
+                    canvas.set_shader_params(&self.black_params(ctx))
                 } else {
                     canvas.set_shader_params(&self.resources.white_params);
                 }
@@ -193,7 +202,7 @@ impl EventHandler for ChessGui {
             self.rendering_offset = (offset, 0f32);
         }
 
-        self.draw_board_base(&mut canvas);
+        self.draw_board_base(&mut canvas, ctx);
 
         canvas.set_default_shader();
 
