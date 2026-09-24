@@ -43,6 +43,7 @@ struct ChessGui {
     selected_square: Option<(u32, u32)>,
 
     square_size: f32,
+    rendering_offset: (f32, f32),
     resources: Resources,
 }
 
@@ -69,11 +70,12 @@ impl ChessGui {
         // Load/create resources such as images here.
         ChessGui {
             chess: chessy::Chess::new(),
-            square_size: 64f32 * 3f32,
+            square_size: 0f32,
             selected_square: None,
             choosing_promotion_piece: false,
             promotion_origin: (0, 0),
             promotion_tagret: (0, 0),
+            rendering_offset: (0f32, 0f32),
             resources: Resources {
                 queen: Image::from_path(&_ctx.gfx, "/wq.png").unwrap(),
                 pawn: Image::from_path(&_ctx.gfx, "/wp.png").unwrap(),
@@ -95,7 +97,10 @@ impl ChessGui {
     fn draw_board_square(&self, canvas: &mut Canvas, row: u32, col: u32, color: Color) {
         let base = DrawParam::default()
             .scale([self.square_size as f32, self.square_size as f32])
-            .dest([col as f32 * self.square_size, row as f32 * self.square_size])
+            .dest([
+                col as f32 * self.square_size + self.rendering_offset.0,
+                row as f32 * self.square_size + self.rendering_offset.1,
+            ])
             .color(color);
         canvas.draw(&Quad, base);
     }
@@ -136,7 +141,10 @@ impl ChessGui {
                     chessy::PieceType::Rook => &self.resources.rook,
                 };
                 let base = DrawParam::default()
-                    .dest([col as f32 * self.square_size, row as f32 * self.square_size])
+                    .dest([
+                        col as f32 * self.square_size + self.rendering_offset.0,
+                        row as f32 * self.square_size + self.rendering_offset.1,
+                    ])
                     .scale([
                         (self.square_size as f32 * 0.8 as f32) / texture.width() as f32,
                         (self.square_size as f32 * 0.8 as f32) / texture.height() as f32,
@@ -174,8 +182,16 @@ impl EventHandler for ChessGui {
         let mut canvas = graphics::Canvas::from_frame(ctx, Color::WHITE);
 
         let min_dimention = f32::min(ctx.gfx.drawable_size().0, ctx.gfx.drawable_size().1);
+        let max_dimention = f32::max(ctx.gfx.drawable_size().0, ctx.gfx.drawable_size().1);
 
         self.square_size = min_dimention / 8.0f32;
+
+        let offset = (max_dimention - self.square_size * 8f32) / 2f32;
+        if ctx.gfx.drawable_size().0 != ctx.gfx.drawable_size().0 {
+            self.rendering_offset = (0f32, offset);
+        } else {
+            self.rendering_offset = (offset, 0f32);
+        }
 
         self.draw_board_base(&mut canvas);
 
@@ -293,18 +309,24 @@ impl EventHandler for ChessGui {
         &mut self,
         _ctx: &mut Context,
         _button: ggez::winit::event::MouseButton,
-        _x: f32,
-        _y: f32,
+        mut _x: f32,
+        mut _y: f32,
     ) -> Result<(), ggez::GameError> {
         if _button != MouseButton::Left {
             return Ok(());
         }
 
+        _x -= self.rendering_offset.0;
+        _y -= self.rendering_offset.1;
+
         if let Some(from) = self.selected_square {
-            let to = (
+            let to = match bound_check((
                 (_x / self.square_size as f32) as u32,
                 (_y / self.square_size as f32) as u32,
-            );
+            )) {
+                Some(t) => t,
+                None => return Ok(()),
+            };
 
             // is promotion move
             if self.chess.board[pos_to_index(from)]
@@ -324,7 +346,7 @@ impl EventHandler for ChessGui {
             }
         }
 
-        self.selected_square = Some((
+        self.selected_square = bound_check((
             (_x / self.square_size as f32) as u32,
             (_y / self.square_size as f32) as u32,
         ));
@@ -339,4 +361,12 @@ fn index_to_pos(i: usize) -> (u32, u32) {
 
 fn pos_to_index(pos: (u32, u32)) -> usize {
     (pos.1 * 8 + pos.0) as usize
+}
+
+fn bound_check(pos: (u32, u32)) -> Option<(u32, u32)> {
+    if pos.1 <= 7 && pos.0 <= 7 {
+        Some(pos)
+    } else {
+        None
+    }
 }
