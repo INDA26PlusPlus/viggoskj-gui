@@ -1,4 +1,3 @@
-use std::path::{Component, Path, PathBuf};
 use chessy::{self, PieceType};
 use crevice::std140::AsStd140;
 use ggez::event::{self, EventHandler};
@@ -9,6 +8,8 @@ use ggez::graphics::{
 use ggez::winit::event::{KeyEvent, MouseButton};
 use ggez::winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use ggez::{Context, ContextBuilder, GameResult};
+use std::cmp::min;
+use std::path::{Component, Path, PathBuf};
 
 #[derive(AsStd140)]
 struct BlackShaderParams {
@@ -17,7 +18,6 @@ struct BlackShaderParams {
 
 fn main() {
     let resource_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("res");
-
     // Make a Context.
     let (mut ctx, event_loop) = ContextBuilder::new("my_game", "Cool Game Author")
         .add_resource_path(resource_dir)
@@ -42,7 +42,7 @@ struct ChessGui {
 
     selected_square: Option<(u32, u32)>,
 
-    square_size: u32,
+    square_size: f32,
     resources: Resources,
 }
 
@@ -69,7 +69,7 @@ impl ChessGui {
         // Load/create resources such as images here.
         ChessGui {
             chess: chessy::Chess::new(),
-            square_size: 64 * 3,
+            square_size: 64f32 * 3f32,
             selected_square: None,
             choosing_promotion_piece: false,
             promotion_origin: (0, 0),
@@ -95,12 +95,8 @@ impl ChessGui {
     fn draw_board_square(&self, canvas: &mut Canvas, row: u32, col: u32, color: Color) {
         let base = DrawParam::default()
             .scale([self.square_size as f32, self.square_size as f32])
-            .dest([
-                (col * self.square_size) as f32,
-                (row * self.square_size) as f32,
-            ])
+            .dest([col as f32 * self.square_size, row as f32 * self.square_size])
             .color(color);
-
         canvas.draw(&Quad, base);
     }
 
@@ -115,9 +111,9 @@ impl ChessGui {
             let (row, col) = index_to_pos(i);
 
             let color = if row % 2 != col % 2 {
-                Color::from_rgb( 30,  40, 50)
+                Color::from_rgb(30, 40, 50)
             } else {
-                Color::from_rgb( 230,  230, 230)
+                Color::from_rgb(230, 230, 230)
             };
 
             self.draw_board_square(canvas, row, col, color);
@@ -140,10 +136,7 @@ impl ChessGui {
                     chessy::PieceType::Rook => &self.resources.rook,
                 };
                 let base = DrawParam::default()
-                    .dest([
-                        (col * self.square_size) as f32,
-                        (row * self.square_size) as f32,
-                    ])
+                    .dest([col as f32 * self.square_size, row as f32 * self.square_size])
                     .scale([
                         (self.square_size as f32 * 0.8 as f32) / texture.width() as f32,
                         (self.square_size as f32 * 0.8 as f32) / texture.height() as f32,
@@ -180,6 +173,10 @@ impl EventHandler for ChessGui {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = graphics::Canvas::from_frame(ctx, Color::WHITE);
 
+        let min_dimention = f32::min(ctx.gfx.drawable_size().0, ctx.gfx.drawable_size().1);
+
+        self.square_size = min_dimention / 8.0f32;
+
         self.draw_board_base(&mut canvas);
 
         canvas.set_default_shader();
@@ -191,10 +188,18 @@ impl EventHandler for ChessGui {
                     chessy::Color::White => "white",
                 };
 
-                self.bilboard(&mut canvas, ctx, "checkmate, ".to_string() + color + " lost. Press Escape to restart.");
+                self.bilboard(
+                    &mut canvas,
+                    ctx,
+                    "checkmate, ".to_string() + color + " lost. Press Escape to restart.",
+                );
             }
             chessy::GameStatus::Stalemate => {
-                self.bilboard(&mut canvas, ctx, "Stalemate. Press Escape to restart".to_string());
+                self.bilboard(
+                    &mut canvas,
+                    ctx,
+                    "Stalemate. Press Escape to restart".to_string(),
+                );
             }
             chessy::GameStatus::Check => {
                 self.bilboard(&mut canvas, ctx, "Check".to_string());
@@ -250,8 +255,7 @@ impl EventHandler for ChessGui {
         input: ggez::input::keyboard::KeyInput,
         _repeated: bool,
     ) -> Result<(), ggez::GameError> {
-        if input.event.physical_key == PhysicalKey::Code(KeyCode::Escape)
-        {
+        if input.event.physical_key == PhysicalKey::Code(KeyCode::Escape) {
             self.choosing_promotion_piece = false;
             self.chess = chessy::Chess::new();
         }
