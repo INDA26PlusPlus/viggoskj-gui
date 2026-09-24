@@ -30,5 +30,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         color.a
     );
 
-    return mix(color, inverted, params.invert);
+    return mix(color, inverted * 0.6, params.invert);
 }
