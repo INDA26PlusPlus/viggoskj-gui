@@ -7,3 +7,4 @@ edition = "2024"
 chessy = { git = "https://github.com/INDA26PlusPlus/tingxuan-chess" }
 ggez = "0.10.0"
 crevice = "0.19"
+rand = "0.10.3"

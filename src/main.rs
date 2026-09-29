@@ -1,15 +1,16 @@
+mod client;
 use chessy::{self, PieceType};
+use client::*;
 use crevice::std140::AsStd140;
+use ggez::conf::WindowSetup;
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{
     self, Canvas, Color, DrawParam, Drawable, GraphicsContext, Image, Quad, Shader, ShaderBuilder,
     ShaderParams, ShaderParamsBuilder, Text,
 };
 use ggez::winit::event::{KeyEvent, MouseButton};
-use ggez::winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+use ggez::winit::keyboard::{KeyCode, PhysicalKey};
 use ggez::{Context, ContextBuilder, GameResult};
-use std::cmp::min;
-use std::path::{Component, Path, PathBuf};
 
 #[derive(AsStd140)]
 struct BlackShaderParams {
@@ -18,24 +19,41 @@ struct BlackShaderParams {
 }
 
 fn main() {
+    println!("Press enter to be server or type in ip address + port to connect.");
+    let mut buffer: String = String::new();
+    std::io::stdin().read_line(&mut buffer).unwrap();
+    let chess = match buffer.trim() {
+        "" => create_server_game().unwrap(),
+        s => create_client_game(s.to_string()).unwrap(),
+    };
+
+    let title = match chess.is_server {
+        true => "Server",
+        false => "Client",
+    };
+
     let resource_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("res");
     // Make a Context.
     let (mut ctx, event_loop) = ContextBuilder::new("my_game", "Cool Game Author")
         .add_resource_path(resource_dir)
+        .window_setup(WindowSetup {
+            title: title.to_string(),
+            ..Default::default()
+        })
         .build()
         .expect("aieee, could not create ggez context!");
 
     // Create an instance of your event handler.
     // Usually, you should provide it with the Context object to
     // use when setting your game up.
-    let my_game = ChessGui::new(&mut ctx);
+    let my_game = ChessGui::new(&mut ctx, chess);
 
     // Run!
     event::run(ctx, event_loop, my_game);
 }
 
 struct ChessGui {
-    chess: chessy::Chess,
+    chess_client: MultiplayerChess,
 
     choosing_promotion_piece: bool,
     promotion_origin: (u32, u32),
@@ -61,7 +79,7 @@ struct Resources {
 }
 
 impl ChessGui {
-    pub fn new(_ctx: &mut Context) -> ChessGui {
+    pub fn new(_ctx: &mut Context, chess: MultiplayerChess) -> ChessGui {
         let black_shader = ShaderBuilder::new()
             .fragment_path("/black.wgsl")
             .build(&_ctx.gfx)
@@ -69,7 +87,7 @@ impl ChessGui {
 
         // Load/create resources such as images here.
         ChessGui {
-            chess: chessy::Chess::new(),
+            chess_client: chess,
             square_size: 0f32,
             selected_square: None,
             choosing_promotion_piece: false,
@@ -140,7 +158,7 @@ impl ChessGui {
         for i in 0..64 {
             let (row, col) = index_to_pos(i);
 
-            if let Some(piece) = self.chess.board[i] {
+            if let Some(piece) = self.chess_client.chess.board[i] {
                 let texture = match piece.piece_type {
                     chessy::PieceType::Bishop => &self.resources.bishop,
                     chessy::PieceType::King => &self.resources.king,
@@ -183,12 +201,18 @@ impl ChessGui {
 
 impl EventHandler for ChessGui {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
+        self.chess_client.tick();
         // Update code here...
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = graphics::Canvas::from_frame(ctx, Color::WHITE);
+
+        if self.chess_client.setting_up {
+            self.bilboard(&mut canvas, ctx, "Setting up".to_string());
+            return canvas.finish(ctx);
+        }
 
         let min_dimention = f32::min(ctx.gfx.drawable_size().0, ctx.gfx.drawable_size().1);
         let max_dimention = f32::max(ctx.gfx.drawable_size().0, ctx.gfx.drawable_size().1);
@@ -206,9 +230,9 @@ impl EventHandler for ChessGui {
 
         canvas.set_default_shader();
 
-        match self.chess.game_status() {
+        match self.chess_client.chess.game_status() {
             chessy::GameStatus::Checkmate => {
-                let color = match self.chess.turn {
+                let color = match self.chess_client.chess.turn {
                     chessy::Color::Black => "black",
                     chessy::Color::White => "white",
                 };
@@ -247,7 +271,7 @@ impl EventHandler for ChessGui {
 
             // show possible moves
 
-            let legal = self.chess.legal_moves(pos_to_index(square));
+            let legal = self.chess_client.chess.legal_moves(pos_to_index(square));
 
             for l in legal {
                 self.draw_board_square_index(
@@ -282,7 +306,7 @@ impl EventHandler for ChessGui {
     ) -> Result<(), ggez::GameError> {
         if input.event.physical_key == PhysicalKey::Code(KeyCode::Escape) {
             self.choosing_promotion_piece = false;
-            self.chess = chessy::Chess::new();
+            self.chess_client.chess = chessy::Chess::new();
         }
 
         if self.choosing_promotion_piece {
@@ -297,6 +321,7 @@ impl EventHandler for ChessGui {
             if piece_type_opt.is_some() {
                 // promote
                 if self
+                    .chess_client
                     .chess
                     .move_piece(
                         pos_to_index(self.promotion_origin),
@@ -338,7 +363,7 @@ impl EventHandler for ChessGui {
             };
 
             // is promotion move
-            if self.chess.board[pos_to_index(from)]
+            if self.chess_client.chess.board[pos_to_index(from)]
                 .is_some_and(|piece| piece.piece_type == PieceType::Pawn)
                 && (to.1 == 0 || to.1 == 7)
             {
@@ -347,6 +372,7 @@ impl EventHandler for ChessGui {
                 self.promotion_tagret = to;
                 return Ok(());
             } else if self
+                .chess_client
                 .chess
                 .move_piece(pos_to_index(from), pos_to_index(to), None)
                 .is_ok()
