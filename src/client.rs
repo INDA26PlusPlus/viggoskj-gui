@@ -54,7 +54,7 @@ impl MultiplayerChess {
             stream: stream,
             chess: chesss,
             setting_up: false,
-            player_color: chessy::Color::White,
+            player_color: you,
             is_server: true,
         };
 
@@ -99,10 +99,10 @@ impl MultiplayerChess {
         println!("{}", buffer);
 
         if self.setting_up {
-            if buffer == "w" {
+            if buffer.trim() == "W" {
                 self.player_color = chessy::Color::Black;
                 self.setting_up = false;
-            } else if buffer == "b" {
+            } else if buffer.trim() == "B" {
                 self.player_color = chessy::Color::White;
                 self.setting_up = false;
             }

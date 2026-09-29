@@ -2,12 +2,13 @@ mod client;
 use chessy::{self, PieceType};
 use client::*;
 use crevice::std140::AsStd140;
-use ggez::conf::WindowSetup;
+use ggez::conf::{WindowMode, WindowSetup};
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{
     self, Canvas, Color, DrawParam, Drawable, GraphicsContext, Image, Quad, Shader, ShaderBuilder,
     ShaderParams, ShaderParamsBuilder, Text,
 };
+use ggez::mint::Point2;
 use ggez::winit::event::{KeyEvent, MouseButton};
 use ggez::winit::keyboard::{KeyCode, PhysicalKey};
 use ggez::{Context, ContextBuilder, GameResult};
@@ -36,6 +37,10 @@ fn main() {
     // Make a Context.
     let (mut ctx, event_loop) = ContextBuilder::new("my_game", "Cool Game Author")
         .add_resource_path(resource_dir)
+        .window_mode(WindowMode {
+            resizable: true,
+            ..Default::default()
+        })
         .window_setup(WindowSetup {
             title: title.to_string(),
             ..Default::default()
@@ -121,19 +126,32 @@ impl ChessGui {
         .build(ctx)
     }
 
+    fn board_square_pos(&self, row: u32, col: u32) -> Point2<f32> {
+        if self.chess_client.player_color == chessy::Color::White {
+            Point2 {
+                x: col as f32 * self.square_size + self.rendering_offset.0,
+                y: row as f32 * self.square_size + self.rendering_offset.1,
+            }
+        } else {
+            Point2 {
+                x: (7 - col) as f32 * self.square_size + self.rendering_offset.0,
+                y: (7 - row) as f32 * self.square_size + self.rendering_offset.1,
+            }
+        }
+    }
+
     fn draw_board_square(&self, canvas: &mut Canvas, row: u32, col: u32, color: Color) {
         let base = DrawParam::default()
             .scale([self.square_size as f32, self.square_size as f32])
-            .dest([
-                col as f32 * self.square_size + self.rendering_offset.0,
-                row as f32 * self.square_size + self.rendering_offset.1,
-            ])
+            .dest(self.board_square_pos(row, col))
             .color(color);
+
         canvas.draw(&Quad, base);
     }
 
     fn draw_board_square_index(&self, canvas: &mut Canvas, index: usize, color: Color) {
         let (row, col) = index_to_pos(index);
+
         self.draw_board_square(canvas, row, col, color);
     }
 
@@ -168,10 +186,7 @@ impl ChessGui {
                     chessy::PieceType::Rook => &self.resources.rook,
                 };
                 let base = DrawParam::default()
-                    .dest([
-                        col as f32 * self.square_size + self.rendering_offset.0,
-                        row as f32 * self.square_size + self.rendering_offset.1,
-                    ])
+                    .dest(self.board_square_pos(row, col))
                     .scale([
                         (self.square_size as f32 * 0.8 as f32) / texture.width() as f32,
                         (self.square_size as f32 * 0.8 as f32) / texture.height() as f32,
@@ -220,7 +235,7 @@ impl EventHandler for ChessGui {
         self.square_size = min_dimention / 8.0f32;
 
         let offset = (max_dimention - self.square_size * 8f32) / 2f32;
-        if ctx.gfx.drawable_size().0 != ctx.gfx.drawable_size().0 {
+        if ctx.gfx.drawable_size().1 != min_dimention {
             self.rendering_offset = (0f32, offset);
         } else {
             self.rendering_offset = (offset, 0f32);
