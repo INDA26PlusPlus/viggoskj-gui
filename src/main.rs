@@ -1,4 +1,5 @@
 mod client;
+mod parsing;
 use chessy::{self, PieceType};
 use client::*;
 use crevice::std140::AsStd140;
@@ -12,6 +13,7 @@ use ggez::mint::Point2;
 use ggez::winit::event::{KeyEvent, MouseButton};
 use ggez::winit::keyboard::{KeyCode, PhysicalKey};
 use ggez::{Context, ContextBuilder, GameResult};
+use parsing::*;
 
 #[derive(AsStd140)]
 struct BlackShaderParams {
@@ -212,6 +214,22 @@ impl ChessGui {
 
         canvas.draw(&text, DrawParam::default());
     }
+
+    fn clicked_square(&self, mut x: f32, mut y: f32) -> Option<(u32, u32)> {
+        x -= self.rendering_offset.0;
+        y -= self.rendering_offset.1;
+
+        let mut initial = (
+            (x / self.square_size as f32) as u32,
+            (y / self.square_size as f32) as u32,
+        );
+
+        if self.chess_client.player_color == chessy::Color::Black {
+            initial = (7 - initial.0, 7 - initial.1);
+        }
+
+        bound_check(initial)
+    }
 }
 
 impl EventHandler for ChessGui {
@@ -337,7 +355,6 @@ impl EventHandler for ChessGui {
                 // promote
                 if self
                     .chess_client
-                    .chess
                     .move_piece(
                         pos_to_index(self.promotion_origin),
                         pos_to_index(self.promotion_tagret),
@@ -365,14 +382,8 @@ impl EventHandler for ChessGui {
             return Ok(());
         }
 
-        _x -= self.rendering_offset.0;
-        _y -= self.rendering_offset.1;
-
         if let Some(from) = self.selected_square {
-            let to = match bound_check((
-                (_x / self.square_size as f32) as u32,
-                (_y / self.square_size as f32) as u32,
-            )) {
+            let to = match self.clicked_square(_x, _y) {
                 Some(t) => t,
                 None => return Ok(()),
             };
@@ -388,7 +399,6 @@ impl EventHandler for ChessGui {
                 return Ok(());
             } else if self
                 .chess_client
-                .chess
                 .move_piece(pos_to_index(from), pos_to_index(to), None)
                 .is_ok()
             {
@@ -396,27 +406,8 @@ impl EventHandler for ChessGui {
             }
         }
 
-        self.selected_square = bound_check((
-            (_x / self.square_size as f32) as u32,
-            (_y / self.square_size as f32) as u32,
-        ));
+        self.selected_square = self.clicked_square(_x, _y);
 
         return Ok(());
-    }
-}
-
-fn index_to_pos(i: usize) -> (u32, u32) {
-    (i as u32 / 8, (i as u32) % 8)
-}
-
-fn pos_to_index(pos: (u32, u32)) -> usize {
-    (pos.1 * 8 + pos.0) as usize
-}
-
-fn bound_check(pos: (u32, u32)) -> Option<(u32, u32)> {
-    if pos.1 <= 7 && pos.0 <= 7 {
-        Some(pos)
-    } else {
-        None
     }
 }
