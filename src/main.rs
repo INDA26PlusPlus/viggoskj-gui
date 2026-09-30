@@ -1,6 +1,6 @@
 mod client;
 mod parsing;
-use chessy::{self, PieceType};
+use chessy::{self, Piece, PieceType};
 use client::*;
 use crevice::std140::AsStd140;
 use ggez::conf::{WindowMode, WindowSetup};
@@ -382,8 +382,11 @@ impl EventHandler for ChessGui {
             return Ok(());
         }
 
+        let clicked_square = self.clicked_square(_x, _y);
+
+        // from square selected
         if let Some(from) = self.selected_square {
-            let to = match self.clicked_square(_x, _y) {
+            let to = match clicked_square {
                 Some(t) => t,
                 None => return Ok(()),
             };
@@ -392,10 +395,19 @@ impl EventHandler for ChessGui {
             if self.chess_client.chess.board[pos_to_index(from)]
                 .is_some_and(|piece| piece.piece_type == PieceType::Pawn)
                 && (to.1 == 0 || to.1 == 7)
+                && self
+                    .chess_client
+                    .chess
+                    .legal_moves(pos_to_index(from))
+                    .contains(&pos_to_index(to))
             {
                 self.choosing_promotion_piece = true;
                 self.promotion_origin = from;
                 self.promotion_tagret = to;
+                return Ok(());
+            } else if from == to {
+                self.choosing_promotion_piece = false;
+                self.selected_square = None;
                 return Ok(());
             } else if self
                 .chess_client
@@ -406,7 +418,18 @@ impl EventHandler for ChessGui {
             }
         }
 
-        self.selected_square = self.clicked_square(_x, _y);
+        if let Some(selected) = clicked_square {
+            match self.chess_client.chess.board[pos_to_index(selected)] {
+                Some(t) => {
+                    if t.color != self.chess_client.player_color {
+                        return Ok(());
+                    }
+                }
+                None => return Ok(()),
+            }
+        }
+
+        self.selected_square = clicked_square;
 
         return Ok(());
     }
