@@ -1,4 +1,4 @@
-use crate::parsing::*;
+use crate::codec::*;
 use chessy::{self, Chess};
 use rand::{random, random_bool};
 use std::{
@@ -45,18 +45,7 @@ impl MultiplayerChess {
             chessy::Color::Black
         };
 
-        stream
-            .write_all(
-                match you {
-                    chessy::Color::Black => "B\nW\n",
-                    chessy::Color::White => "W\nB\n",
-                }
-                .as_bytes(),
-            )
-            .unwrap();
-        stream.flush().unwrap();
-
-        let chess = MultiplayerChess {
+        let mut chess = MultiplayerChess {
             stream: stream,
             chess: chesss,
             setting_up: false,
@@ -69,6 +58,14 @@ impl MultiplayerChess {
             },
         };
 
+        chess.send_data(
+            match you {
+                chessy::Color::Black => "B\nW\n",
+                chessy::Color::White => "W\nB\n",
+            }
+            .to_string(),
+        );
+
         return chess;
     }
 
@@ -78,7 +75,6 @@ impl MultiplayerChess {
         let mut buff = String::new();
         stream.set_nonblocking(true).unwrap();
         let _ = stream.read_to_string(&mut buff); // ignore this too
-        println!("adasd");
         println!("{}", buff);
 
         let chess = MultiplayerChess {
@@ -94,6 +90,12 @@ impl MultiplayerChess {
         return chess;
     }
 
+    pub fn send_data(&mut self, data: String) {
+        println!("Sent: \"{}\"", data);
+        self.stream.write_all((data + "\n").as_bytes()).unwrap();
+        self.stream.flush().unwrap();
+    }
+
     pub fn move_piece(
         &mut self,
         from: usize,
@@ -107,12 +109,11 @@ impl MultiplayerChess {
             let mut move_str = String::new();
             move_str += &index_to_str(from);
             move_str += &index_to_str(to);
-            move_str += "-";
-            move_str += &" ".repeat(64);
+            move_str += &piece_type_to_char(promotion).to_string();
+            move_str += &board_to_string(self.chess.board);
             move_str += "\n";
 
-            self.stream.write_all(move_str.as_bytes()).unwrap();
-            self.stream.flush().unwrap();
+            self.send_data(move_str);
             self.your_turn = false;
             Ok(())
         } else {
@@ -137,7 +138,7 @@ impl MultiplayerChess {
             _ => {}
         }
 
-        println!("{}", buffer);
+        println!("Recived: \"{}\"", buffer);
 
         if self.setting_up {
             if buffer.trim() == "W" {
@@ -153,41 +154,52 @@ impl MultiplayerChess {
                 return;
             }
         }
+
+        if self.your_turn {
+            match self.chess.game_status() {
+                chessy::GameStatus::Checkmate => {
+                    self.send_data("CHECKMATE".to_string());
+                }
+                chessy::GameStatus::Stalemate => {
+                    self.send_data("STALEMATE".to_string());
+                }
+                _ => {}
+            }
+        }
+
         if buffer.len() == 4 + 1 + 64 + 1 {
             println!("parsing move");
 
             let (from_str, rest_str) = buffer.split_at(2);
             let (to_str, rest_str) = rest_str.split_at(2);
-            let (promotion_str, check_str) = rest_str.split_at(1);
+            let (promotion_str, board_str) = rest_str.split_at(1);
 
             let from = pos_to_index(str_to_pos(from_str.to_string()));
-            let to = pos_to_index(str_to_pos(to_str.to_string()));
+            let to: usize = pos_to_index(str_to_pos(to_str.to_string()));
             let promotion = str_to_promotion_piece(promotion_str);
 
-            match self.chess.move_piece(from, to, promotion) {
-                Err(err) => {
-                    println!("rejected move");
-                    self.stream.write_all("REJECT".as_bytes()).unwrap();
-                    self.stream.flush().unwrap();
-                }
-                Ok(()) => {
-                    println!("accepted move");
-                    self.stream.write_all("OK".as_bytes()).unwrap();
-                    self.stream.flush().unwrap();
-                    self.your_turn = true;
-                }
+            let reject = match self.chess.move_piece(from, to, promotion) {
+                Err(err) => true,
+                Ok(()) => board_to_string(self.chess.board).trim() != board_str.trim(),
+            };
+
+            if reject {
+                self.send_data("REJECT".to_string());
+            } else {
+                self.your_turn = true;
+                self.send_data("OK".to_string());
             }
+
             return;
         }
 
         if buffer.trim() == "OK" {
-            println!("recived ok");
-            self.your_turn = true;
+            self.your_turn = false;
         }
 
         if buffer.trim() == "REJECT" {
-            println!("recived reject");
             self.chess = self.old_chess;
+            self.your_turn = true;
         }
     }
 }

@@ -1,5 +1,5 @@
 mod client;
-mod parsing;
+mod codec;
 use chessy::{self, Piece, PieceType};
 use client::*;
 use crevice::std140::AsStd140;
@@ -13,7 +13,7 @@ use ggez::mint::Point2;
 use ggez::winit::event::{KeyEvent, MouseButton};
 use ggez::winit::keyboard::{KeyCode, PhysicalKey};
 use ggez::{Context, ContextBuilder, GameResult};
-use parsing::*;
+use codec::*;
 
 #[derive(AsStd140)]
 struct BlackShaderParams {
@@ -273,14 +273,14 @@ impl EventHandler for ChessGui {
                 self.bilboard(
                     &mut canvas,
                     ctx,
-                    "checkmate, ".to_string() + color + " lost. Press Escape to restart.",
+                    "checkmate, ".to_string() + color + " lost. Press Escape to quit.",
                 );
             }
             chessy::GameStatus::Stalemate => {
                 self.bilboard(
                     &mut canvas,
                     ctx,
-                    "Stalemate. Press Escape to restart".to_string(),
+                    "Stalemate. Press Escape to quit".to_string(),
                 );
             }
             chessy::GameStatus::Check => {
@@ -324,7 +324,7 @@ impl EventHandler for ChessGui {
             self.bilboard(
                 &mut canvas,
                 ctx,
-                "Promotion, press K: Knight, Q: Queen, B: Bishop, R: Rook".to_string(),
+                "Promotion, press N: Knight, Q: Queen, B: Bishop, R: Rook".to_string(),
             );
         }
 
@@ -338,13 +338,12 @@ impl EventHandler for ChessGui {
         _repeated: bool,
     ) -> Result<(), ggez::GameError> {
         if input.event.physical_key == PhysicalKey::Code(KeyCode::Escape) {
-            self.choosing_promotion_piece = false;
-            self.chess_client.chess = chessy::Chess::new();
+            ctx.request_quit();
         }
 
         if self.choosing_promotion_piece {
             let piece_type_opt: Option<PieceType> = match input.event.physical_key {
-                PhysicalKey::Code(KeyCode::KeyK) => Some(PieceType::Knight),
+                PhysicalKey::Code(KeyCode::KeyN) => Some(PieceType::Knight),
                 PhysicalKey::Code(KeyCode::KeyQ) => Some(PieceType::Queen),
                 PhysicalKey::Code(KeyCode::KeyR) => Some(PieceType::Rook),
                 PhysicalKey::Code(KeyCode::KeyB) => Some(PieceType::Bishop),

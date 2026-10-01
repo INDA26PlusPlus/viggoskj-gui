@@ -1,4 +1,5 @@
-use chessy::PieceType;
+use chessy::{Piece, PieceType};
+use rand::make_rng;
 
 pub fn index_to_str(index: usize) -> String {
     let (row, col) = index_to_pos(index);
@@ -13,12 +14,70 @@ pub fn str_to_pos(string: String) -> (u32, u32) {
 pub fn str_to_promotion_piece(string: &str) -> Option<PieceType> {
     match string.to_lowercase().as_str() {
         "p" => Some(PieceType::Pawn),
-        "k" => Some(PieceType::Knight),
+        "n" => Some(PieceType::Knight),
         "q" => Some(PieceType::Queen),
         "r" => Some(PieceType::Rook),
         "b" => Some(PieceType::Bishop),
         "-" => None,
-        _ => panic!("ABAAAAAAAAAAA")
+        _ => panic!("ABAAAAAAAAAAA"),
+    }
+}
+
+pub fn str_to_piece_type(string: &str) -> Option<PieceType> {
+    match string.to_lowercase().as_str() {
+        "p" => Some(PieceType::Pawn),
+        "n" => Some(PieceType::Knight),
+        "q" => Some(PieceType::Queen),
+        "r" => Some(PieceType::Rook),
+        "b" => Some(PieceType::Bishop),
+        "p" => Some(PieceType::Pawn),
+        "k" => Some(PieceType::King),
+        "-" => None,
+        " " => None,
+        _ => panic!("ABAAAAAAAAAAA"),
+    }
+}
+
+pub fn piece_to_char(piece: Option<Piece>) -> char {
+    if let Some(p) = piece {
+        match p.color {
+            chessy::Color::Black => piece_type_to_char(Some(p.piece_type)),
+            chessy::Color::White => piece_type_to_char(Some(p.piece_type)).to_ascii_uppercase(),
+        }
+    } else {
+        ' '
+    }
+}
+
+pub fn board_to_string(board: [Option<Piece>; 64]) -> String {
+    board.iter().fold(String::new(), |a, piece| {
+        a + &piece_to_char(*piece).to_string()
+    })
+}
+
+pub fn char_to_piece(piece: char) -> Option<Piece> {
+    if let Some(piece_type) = str_to_piece_type(&piece.to_string()) {
+        Some(Piece {
+            piece_type: piece_type,
+            color: match piece.is_uppercase() {
+                true => chessy::Color::White,
+                false => chessy::Color::Black,
+            },
+        })
+    } else {
+        None
+    }
+}
+
+pub fn piece_type_to_char(piece_type: Option<PieceType>) -> char {
+    match piece_type {
+        Some(PieceType::Bishop) => 'b',
+        Some(PieceType::King) => 'k',
+        Some(PieceType::Knight) => 'n',
+        Some(PieceType::Pawn) => 'p',
+        Some(PieceType::Queen) => 'q',
+        Some(PieceType::Rook) => 'r',
+        None => '-',
     }
 }
 
