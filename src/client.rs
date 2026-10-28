@@ -111,7 +111,6 @@ impl MultiplayerChess {
             move_str += &index_to_str(to);
             move_str += &piece_type_to_char(promotion).to_string();
             move_str += &board_to_string(self.chess.board);
-            move_str += "\n";
 
             self.send_data(move_str);
             self.your_turn = false;
@@ -184,8 +183,10 @@ impl MultiplayerChess {
             };
 
             if reject {
+                self.chess = self.old_chess.clone();
                 self.send_data("REJECT".to_string());
             } else {
+                self.old_chess = self.chess.clone();
                 self.your_turn = true;
                 self.send_data("OK".to_string());
             }
@@ -198,7 +199,7 @@ impl MultiplayerChess {
         }
 
         if buffer.trim() == "REJECT" {
-            self.chess = self.old_chess;
+            self.chess = self.old_chess.clone();
             self.your_turn = true;
         }
     }
